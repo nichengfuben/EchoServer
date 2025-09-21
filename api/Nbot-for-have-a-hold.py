@@ -39,6 +39,7 @@ import functools
 import io
 import gzip
 import zlib
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from model_utils import chat as chat_reply_func,chat_stream as chat_with_model_stream
 from printstream import *
 # ===== 配置常量 =====
