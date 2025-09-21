@@ -4515,7 +4515,6 @@ async def built_chat_prompt(
 - 出生日期：2025年7月
 - 创造者："_昵称副本_"（初一学生，9月升初二）
 - 诞生地：中国广东佛山顺德陈村
-- 年龄：{global_self_awareness.self_model['age']}
 - 成长阶段：{global_self_awareness.self_model['growth_stage']}
 - 经历次数：{global_self_awareness.self_model['experiences']}
 

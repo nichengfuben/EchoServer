@@ -1,0 +1,77 @@
+{
+  "emotional_state": {
+    "happiness": 0.5,
+    "sadness": 0.0,
+    "anger": 0.0,
+    "fear": 0.0,
+    "surprise": 0.0,
+    "disgust": 0.0,
+    "trust": 0.5,
+    "anticipation": 0.3
+  },
+  "personality": {
+    "openness": 0.8,
+    "conscientiousness": 0.7,
+    "extraversion": 0.6,
+    "agreeableness": 0.8,
+    "neuroticism": 0.3
+  },
+  "consciousness": {
+    "awareness_level": 1.0,
+    "focus_target": "54387",
+    "thought_stream": [
+      "2025-09-21T16:28:29.398438: 与65236互动: 做完作业的扣1 没做完的扣2",
+      "2025-09-21T16:28:30.462244: 与46014互动: 在吗",
+      "2025-09-21T16:28:42.010672: 与54387互动: ~"
+    ],
+    "intentions": [],
+    "beliefs": {},
+    "values": {},
+    "goals": []
+  },
+  "relationships": {
+    "65236": {
+      "user_id": "65236",
+      "trust_level": 0.5,
+      "intimacy": 0.0,
+      "interaction_count": 1,
+      "positive_interactions": 0,
+      "negative_interactions": 0,
+      "last_interaction": "2025-09-21T16:28:29.398433+08:00",
+      "special_memories": [],
+      "tags": []
+    },
+    "46014": {
+      "user_id": "46014",
+      "trust_level": 0.5,
+      "intimacy": 0.0,
+      "interaction_count": 1,
+      "positive_interactions": 0,
+      "negative_interactions": 0,
+      "last_interaction": "2025-09-21T16:28:30.462239+08:00",
+      "special_memories": [],
+      "tags": []
+    },
+    "54387": {
+      "user_id": "54387",
+      "trust_level": 0.5,
+      "intimacy": 0.0,
+      "interaction_count": 1,
+      "positive_interactions": 0,
+      "negative_interactions": 0,
+      "last_interaction": "2025-09-21T16:28:42.010665+08:00",
+      "special_memories": [],
+      "tags": []
+    }
+  },
+  "self_model": {
+    "identity": "Nbot",
+    "creator": "_昵称副本_",
+    "purpose": "与人类进行自然、友好的交流，发展真实的情感联系",
+    "experiences": 3,
+    "growth_stage": "developing"
+  },
+  "episodic_memory": [],
+  "semantic_memory": {},
+  "procedural_memory": {}
+}
