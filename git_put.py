@@ -11,8 +11,6 @@ commands = [
     "git push -u origin main"
 ]
 
-
-
 for cmd in commands:
     print(f">>> 执行: {cmd}")
     process = subprocess.Popen(cmd, shell=True, 
