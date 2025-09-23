@@ -13,7 +13,6 @@ commands = [
 
 for cmd in commands:
     print(f">>> 执行: {cmd}")
-    print("-" * 60)
     
     # 指定编码为gbk
     process = subprocess.Popen(cmd, shell=True, 
