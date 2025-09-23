@@ -19,13 +19,13 @@ class handler(BaseHTTPRequestHandler):
         try:
             self.log_install("🚀 启动时自动依赖检查...")
             
-            # 检查是否有requirements.txt
+            # 检查是否有package.txt
             requirements_path = self.find_requirements_file()
             if requirements_path:
-                self.log_install(f"📋 找到 requirements.txt: {requirements_path}")
+                self.log_install(f"📋 找到 package.txt: {requirements_path}")
                 self.install_from_requirements(requirements_path)
             else:
-                self.log_install("📋 未找到 requirements.txt，使用默认依赖列表")
+                self.log_install("📋 未找到 package.txt，使用默认依赖列表")
                 self.install_default_dependencies()
                 
         except Exception as e:
@@ -62,7 +62,7 @@ class handler(BaseHTTPRequestHandler):
                 })
                 
             elif '/install-requirements' in path:
-                # 专门安装 requirements.txt
+                # 专门安装 package.txt
                 result = self.install_requirements_txt()
                 self.send_json_response({
                     'action': 'install_requirements_txt',
@@ -135,26 +135,26 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(text.encode())
     
     def find_requirements_file(self):
-        """查找 requirements.txt 文件"""
+        """查找 package.txt 文件"""
         current_dir = os.path.dirname(os.path.abspath(__file__))
         possible_paths = [
-            os.path.join(current_dir, 'requirements.txt'),
-            os.path.join(current_dir, '..', 'requirements.txt'),
-            os.path.join(current_dir, '..', '..', 'requirements.txt'),
-            os.path.join(current_dir, '..', 'core', 'requirements.txt'),
-            os.path.join(os.getcwd(), 'requirements.txt')
+            os.path.join(current_dir, 'package.txt'),
+            os.path.join(current_dir, '..', 'package.txt'),
+            os.path.join(current_dir, '..', '..', 'package.txt'),
+            os.path.join(current_dir, '..', 'core', 'package.txt'),
+            os.path.join(os.getcwd(), 'package.txt')
         ]
         
         for path in possible_paths:
             if os.path.exists(path):
-                self.log_install(f"✅ 找到 requirements.txt: {path}")
+                self.log_install(f"✅ 找到 package.txt: {path}")
                 return path
         
-        self.log_install(f"❌ 未找到 requirements.txt，搜索路径: {possible_paths}")
+        self.log_install(f"❌ 未找到 package.txt，搜索路径: {possible_paths}")
         return None
     
     def install_requirements_txt(self):
-        """安装 requirements.txt 中的依赖"""
+        """安装 package.txt 中的依赖"""
         requirements_path = self.find_requirements_file()
         
         if not requirements_path:
@@ -163,17 +163,17 @@ class handler(BaseHTTPRequestHandler):
         return self.install_from_requirements(requirements_path)
     
     def install_from_requirements(self, requirements_path):
-        """从 requirements.txt 文件安装依赖"""
-        self.log_install(f"📦 开始从 requirements.txt 安装依赖: {requirements_path}")
+        """从 package.txt 文件安装依赖"""
+        self.log_install(f"📦 开始从 package.txt 安装依赖: {requirements_path}")
         
         try:
-            # 读取 requirements.txt 内容
+            # 读取 package.txt 内容
             with open(requirements_path, 'r', encoding='utf-8') as f:
                 requirements_content = f.read().strip()
             
             self.log_install(f"📋 Requirements 内容:\n{requirements_content}")
             
-            # 使用 pip install -r requirements.txt
+            # 使用 pip install -r package.txt
             self.log_install(f"🔧 执行: pip install -r {requirements_path}")
             
             result = subprocess.run(
@@ -184,32 +184,32 @@ class handler(BaseHTTPRequestHandler):
             )
             
             if result.returncode == 0:
-                self.log_install("✅ requirements.txt 安装成功!")
+                self.log_install("✅ package.txt 安装成功!")
                 self.log_install(f"安装输出: {result.stdout[:500]}...")
                 
                 return {
                     'success': True,
-                    'method': 'requirements.txt',
+                    'method': 'package.txt',
                     'file_path': requirements_path,
                     'output': result.stdout
                 }
             else:
                 error_msg = result.stderr.strip() if result.stderr else "未知错误"
-                self.log_install(f"❌ requirements.txt 安装失败: {error_msg}")
+                self.log_install(f"❌ package.txt 安装失败: {error_msg}")
                 
                 # 如果失败，尝试逐个安装
                 return self.install_requirements_individually(requirements_path)
                 
         except subprocess.TimeoutExpired:
-            self.log_install("⏰ requirements.txt 安装超时，尝试逐个安装")
+            self.log_install("⏰ package.txt 安装超时，尝试逐个安装")
             return self.install_requirements_individually(requirements_path)
         except Exception as e:
-            self.log_install(f"💥 读取 requirements.txt 失败: {str(e)}")
+            self.log_install(f"💥 读取 package.txt 失败: {str(e)}")
             return self.install_default_dependencies()
     
     def install_requirements_individually(self, requirements_path):
-        """逐个安装 requirements.txt 中的依赖"""
-        self.log_install("🔄 尝试逐个安装 requirements.txt 中的依赖...")
+        """逐个安装 package.txt 中的依赖"""
+        self.log_install("🔄 尝试逐个安装 package.txt 中的依赖...")
         
         try:
             with open(requirements_path, 'r', encoding='utf-8') as f:
@@ -268,7 +268,7 @@ class handler(BaseHTTPRequestHandler):
     
     def check_dependencies(self):
         """检查依赖是否安装"""
-        # 先检查requirements.txt中的依赖
+        # 先检查package.txt中的依赖
         requirements_path = self.find_requirements_file()
         dependencies = []
         
@@ -282,9 +282,9 @@ class handler(BaseHTTPRequestHandler):
                             package = line.split('==')[0].split('>=')[0].split('<=')[0].split('>')[0].split('<')[0].split('!=')[0]
                             dependencies.append(package)
             except Exception as e:
-                self.log_install(f"读取 requirements.txt 失败: {str(e)}")
+                self.log_install(f"读取 package.txt 失败: {str(e)}")
         
-        # 如果没有requirements.txt，使用默认依赖
+        # 如果没有package.txt，使用默认依赖
         if not dependencies:
             dependencies = [
                 'requests', 'urllib3', 'certifi', 'charset-normalizer', 'idna',
@@ -310,11 +310,11 @@ class handler(BaseHTTPRequestHandler):
     
     def install_dependencies(self):
         """安装依赖的主入口"""
-        # 优先尝试从requirements.txt安装
+        # 优先尝试从package.txt安装
         return self.install_requirements_txt()
     
     def install_default_dependencies(self):
-        """安装默认依赖（当没有requirements.txt时）"""
+        """安装默认依赖（当没有package.txt时）"""
         self.log_install("📦 使用默认依赖列表安装...")
         
         # 常用依赖列表
@@ -569,7 +569,7 @@ class handler(BaseHTTPRequestHandler):
     <div class="container">
         <div class="header">
             <h1>🤖 Nbot 智能控制台</h1>
-            <p>自动 requirements.txt 安装 | 智能依赖管理 | 实时监控</p>
+            <p>自动 package.txt 安装 | 智能依赖管理 | 实时监控</p>
         </div>
         
         <div class="content">
@@ -609,7 +609,7 @@ class handler(BaseHTTPRequestHandler):
                     <h4>📦 依赖状态</h4>
                     <p><strong>已安装:</strong> {len(deps_status['available'])}</p>
                     <p><strong>缺失:</strong> {len(deps_status['missing'])}</p>
-                    <p><strong>来源:</strong> {'requirements.txt' if deps_status['requirements_file_found'] else '默认列表'}</p>
+                    <p><strong>来源:</strong> {'package.txt' if deps_status['requirements_file_found'] else '默认列表'}</p>
                     
                     {f'''<div style="margin-top: 10px;">
                         <strong>缺失的依赖:</strong><br>
@@ -619,8 +619,8 @@ class handler(BaseHTTPRequestHandler):
                 
                 <div class="card">
                     <h4>🔧 自动化功能</h4>
-                    <p>• ✅ 启动时自动检测 requirements.txt</p>
-                    <p>• ✅ 自动运行 pip install -r requirements.txt</p>
+                    <p>• ✅ 启动时自动检测 package.txt</p>
+                    <p>• ✅ 自动运行 pip install -r package.txt</p>
                     <p>• ✅ 失败时逐个安装依赖</p>
                     <p>• ✅ 实时监控和错误诊断</p>
                     <p>• ✅ 支持手动重新安装</p>
@@ -634,7 +634,7 @@ class handler(BaseHTTPRequestHandler):
             </div>''' if self.install_log else ''}
             
             <div style="text-align: center; margin-top: 30px; color: #666;">
-                <p>🔄 页面每60秒自动刷新 | 🚀 自动 requirements.txt 安装已启用</p>
+                <p>🔄 页面每60秒自动刷新 | 🚀 自动 package.txt 安装已启用</p>
             </div>
         </div>
     </div>
