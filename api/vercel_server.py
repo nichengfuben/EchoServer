@@ -313,3 +313,4 @@ if __name__ == '__main__':
     result = handler(test_event)
     print(f"Status: {{result['statusCode']}}")
     print(f"Content-Type: {{result['headers']['Content-Type']}}")
+    
