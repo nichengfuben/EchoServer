@@ -8,13 +8,12 @@
   ],
   "routes": [
     {
+      "src": "/api/(.*)",
+      "dest": "/api/vercel_server.py"
+    },
+    {
       "src": "/(.*)",
       "dest": "/api/vercel_server.py"
     }
-  ],
-  "functions": {
-    "api/vercel_server.py": {
-      "runtime": "@vercel/python@3.9"
-    }
-  }
+  ]
 }
