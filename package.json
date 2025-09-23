@@ -1,15 +1,31 @@
 {
   "name": "nbot-vercel-server",
-  "version": "1.0.0",
-  "description": "Nbot 0.4.0 Server on Vercel",
+  "version": "0.4.0",
+  "description": "Nbot server running on Vercel",
+  "main": "api/vercel_server.py",
   "scripts": {
-    "dev": "vercel dev",
-    "build": "echo 'Building Python project'"
+    "dev": "python api/vercel_server.py",
+    "start": "python api/vercel_server.py",
+    "test": "python -m pytest tests/ -v",
+    "deploy": "vercel --prod"
   },
-  "dependencies": {
-    "@vercel/python": "^3.0.0"
+  "repository": {
+    "type": "git",
+    "url": "your-repo-url"
+  },
+  "keywords": [
+    "nbot",
+    "chatbot",
+    "vercel",
+    "serverless",
+    "python"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.x"
   },
   "devDependencies": {
-    "vercel": "^28.0.0"
+    "vercel": "^32.0.0"
   }
 }

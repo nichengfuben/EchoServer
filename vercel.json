@@ -1,18 +1,53 @@
 {
   "version": 2,
-  "functions": {
-    "api/vercel_server.py": {
-      "runtime": "@vercel/python@3.9"
+  "builds": [
+    {
+      "src": "api/vercel_server.py",
+      "use": "@vercel/python"
     }
-  },
+  ],
   "routes": [
     {
-      "src": "/api/(.*)",
+      "src": "/api/vercel_server/(.*)",
       "dest": "/api/vercel_server.py"
     },
     {
-      "src": "/(.*)",
+      "src": "/health",
       "dest": "/api/vercel_server.py"
+    },
+    {
+      "src": "/",
+      "dest": "/api/vercel_server.py"
+    }
+  ],
+  "functions": {
+    "api/vercel_server.py": {
+      "maxDuration": 30,
+      "memory": 1024,
+      "runtime": "python3.9"
+    }
+  },
+  "env": {
+    "VERCEL_DEPLOYMENT": "true",
+    "PYTHONPATH": "."
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, PUT, DELETE, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization"
+        }
+      ]
     }
   ]
 }
