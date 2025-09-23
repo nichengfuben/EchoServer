@@ -1,354 +1,315 @@
-#!/usr/bin/env python3
-"""
-Vercel 服务器 - 简化版本，避免复杂的类继承
-"""
-
+import json
 import os
 import sys
-import json
 import subprocess
-import time
 from datetime import datetime
 
-# 全局变量存储进程信息
-nbot_info = {
-    'process': None,
-    'start_time': None,
-    'output_log': [],
-    'max_log_lines': 100
-}
-
-def run_nbot_once(action="status", message=""):
-    """运行一次 Nbot 并获取输出"""
+def handler(event, context=None):
+    """标准的 Vercel Python 函数入口点"""
+    
+    # 获取请求信息
+    http_method = event.get('httpMethod', event.get('method', 'GET'))
+    path = event.get('path', event.get('rawPath', '/'))
+    query = event.get('queryStringParameters') or {}
+    
     try:
-        # 找到 Nbot 文件
+        if http_method == 'GET':
+            
+            if 'stats' in path:
+                # 运行 Nbot 并返回状态
+                result = run_nbot_simple()
+                return create_response(200, {
+                    'status': 'ok',
+                    'python_version': sys.version,
+                    'nbot_result': result,
+                    'timestamp': datetime.now().isoformat()
+                })
+            
+            elif 'health' in path:
+                return create_response(200, {
+                    'status': 'healthy',
+                    'message': 'Nbot server is working',
+                    'python_version': sys.version
+                })
+            
+            elif 'run' in path:
+                result = run_nbot_simple()
+                return create_response(200, {
+                    'action': 'manual_run',
+                    'result': result
+                })
+            
+            else:
+                # 主页 HTML
+                html = create_dashboard_html()
+                return create_html_response(html)
+        
+        elif http_method == 'POST':
+            # 处理 POST 请求
+            body = event.get('body', '{}')
+            if isinstance(body, str):
+                try:
+                    data = json.loads(body)
+                except:
+                    data = {}
+            else:
+                data = body or {}
+            
+            action = data.get('action', 'test')
+            message = data.get('message', 'Hello')
+            
+            result = run_nbot_simple(action, message)
+            
+            return create_response(200, {
+                'success': True,
+                'action': action,
+                'message': message,
+                'result': result
+            })
+        
+        else:
+            return create_response(405, {'error': 'Method not allowed'})
+            
+    except Exception as e:
+        return create_response(500, {
+            'error': str(e),
+            'python_version': sys.version
+        })
+
+def run_nbot_simple(action='status', message='test'):
+    """简单运行 Nbot"""
+    try:
+        # 查找 Nbot 文件
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        possible_paths = [
+        
+        # 可能的路径
+        paths_to_try = [
             os.path.join(current_dir, '..', 'core', 'Nbot-for-have-a-hold.py'),
             os.path.join(current_dir, 'Nbot-for-have-a-hold.py'),
-            os.path.join(current_dir, '..', 'Nbot-for-have-a-hold.py'),
+            os.path.join(current_dir, '..', 'Nbot-for-have-a-hold.py')
         ]
         
         nbot_path = None
-        for path in possible_paths:
+        for path in paths_to_try:
             if os.path.exists(path):
                 nbot_path = path
                 break
         
         if not nbot_path:
-            return "Error: Nbot-for-have-a-hold.py not found"
+            return f"Nbot file not found. Searched: {paths_to_try}"
         
         # 设置环境变量
         env = os.environ.copy()
-        env['VERCEL_DEPLOYMENT'] = 'true'
         env['NBOT_ACTION'] = str(action)
         env['NBOT_MESSAGE'] = str(message)
+        env['VERCEL_ENV'] = 'true'
         
         # 运行 Nbot
-        result = subprocess.run(
+        process = subprocess.run(
             [sys.executable, nbot_path],
             capture_output=True,
             text=True,
-            timeout=25,
-            env=env,
-            cwd=os.path.dirname(nbot_path)
+            timeout=20,
+            env=env
         )
         
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        if result.returncode == 0:
-            output = result.stdout.strip()
-            log_entry = f"[{timestamp}] SUCCESS: {output}"
+        if process.returncode == 0:
+            output = process.stdout.strip()
+            return output if output else f"Nbot ran successfully. Action: {action}"
         else:
-            error = result.stderr.strip() if result.stderr else "Unknown error"
-            log_entry = f"[{timestamp}] ERROR (code {result.returncode}): {error}"
-        
-        # 添加到日志
-        add_to_log(log_entry)
-        
-        return log_entry
-        
+            error = process.stderr.strip() if process.stderr else "Unknown error"
+            return f"Nbot failed: {error}"
+            
     except subprocess.TimeoutExpired:
-        log_entry = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] TIMEOUT: Nbot execution timeout"
-        add_to_log(log_entry)
-        return log_entry
+        return "Nbot execution timeout"
     except Exception as e:
-        log_entry = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] EXCEPTION: {str(e)}"
-        add_to_log(log_entry)
-        return log_entry
+        return f"Error: {str(e)}"
 
-def add_to_log(message):
-    """添加消息到日志"""
-    global nbot_info
-    nbot_info['output_log'].append(message)
-    # 保持日志大小限制
-    if len(nbot_info['output_log']) > nbot_info['max_log_lines']:
-        nbot_info['output_log'] = nbot_info['output_log'][-nbot_info['max_log_lines']:]
-
-def get_status():
-    """获取状态信息"""
+def create_response(status_code, data):
+    """创建标准 JSON 响应"""
     return {
-        'server_status': 'running',
-        'python_version': sys.version,
-        'current_time': datetime.now().isoformat(),
-        'log_lines': len(nbot_info['output_log']),
-        'recent_logs': nbot_info['output_log'][-20:] if nbot_info['output_log'] else []
+        'statusCode': status_code,
+        'headers': {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+        },
+        'body': json.dumps(data, ensure_ascii=False)
     }
 
-def handler(request):
-    """Vercel 函数入口点"""
-    try:
-        # 获取请求信息
-        method = getattr(request, 'method', 'GET')
-        
-        # 尝试多种方式获取路径
-        path = '/'
-        if hasattr(request, 'path'):
-            path = request.path
-        elif hasattr(request, 'url'):
-            path = request.url
-        elif hasattr(request, 'query') and 'path' in request.query:
-            path = request.query['path']
-        
-        if method == 'GET':
-            
-            if '/stats' in path:
-                # 运行一次 Nbot 获取最新状态
-                run_result = run_nbot_once("status", "health_check")
-                status = get_status()
-                status['latest_run'] = run_result
-                
-                return {
-                    'statusCode': 200,
-                    'headers': {'Content-Type': 'application/json'},
-                    'body': json.dumps(status, indent=2)
-                }
-                
-            elif '/run' in path:
-                # 手动运行 Nbot
-                result = run_nbot_once("manual", "test_run")
-                return {
-                    'statusCode': 200,
-                    'headers': {'Content-Type': 'application/json'},
-                    'body': json.dumps({'result': result})
-                }
-                
-            elif '/logs' in path:
-                # 获取纯文本日志
-                logs = '\n'.join(nbot_info['output_log'])
-                return {
-                    'statusCode': 200,
-                    'headers': {'Content-Type': 'text/plain; charset=utf-8'},
-                    'body': logs if logs else 'No logs yet.'
-                }
-                
-            elif '/health' in path:
-                return {
-                    'statusCode': 200,
-                    'headers': {'Content-Type': 'application/json'},
-                    'body': json.dumps({
-                        'status': 'healthy',
-                        'message': 'Nbot server is working',
-                        'python_version': sys.version,
-                        'timestamp': datetime.now().isoformat()
-                    })
-                }
-                
-            else:
-                # 主页 - 显示仪表板
-                status = get_status()
-                
-                # 自动运行一次获取最新状态
-                latest_run = run_nbot_once("dashboard", "auto_check")
-                
-                html_content = f'''
-<!DOCTYPE html>
-<html>
+def create_html_response(html):
+    """创建 HTML 响应"""
+    return {
+        'statusCode': 200,
+        'headers': {
+            'Content-Type': 'text/html; charset=utf-8'
+        },
+        'body': html
+    }
+
+def create_dashboard_html():
+    """创建仪表板 HTML"""
+    # 运行 Nbot 获取当前状态
+    nbot_result = run_nbot_simple('dashboard', 'status_check')
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    return f'''<!DOCTYPE html>
+<html lang="zh-CN">
 <head>
-    <title>🤖 Nbot Control Panel</title>
-    <meta charset="utf-8">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🤖 Nbot 控制台</title>
     <meta http-equiv="refresh" content="30">
     <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{ 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
-            max-width: 1200px; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }}
+        .container {{ 
+            max-width: 1000px; 
             margin: 0 auto; 
-            padding: 20px; 
-            background-color: #f5f5f5; 
+            background: white; 
+            border-radius: 15px; 
+            box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+            overflow: hidden;
         }}
         .header {{ 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(45deg, #2196F3, #21CBF3); 
             color: white; 
-            padding: 20px; 
-            border-radius: 10px; 
-            margin-bottom: 20px; 
+            padding: 30px; 
+            text-align: center; 
         }}
-        .card {{ 
-            background: white; 
-            padding: 20px; 
+        .header h1 {{ font-size: 2.5em; margin-bottom: 10px; }}
+        .content {{ padding: 30px; }}
+        .status-card {{ 
+            background: #f8f9fa; 
             border-radius: 10px; 
-            margin-bottom: 20px; 
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+            padding: 20px; 
+            margin-bottom: 20px;
+            border-left: 5px solid #28a745;
         }}
-        .status-good {{ color: #28a745; font-weight: bold; }}
-        .nav-buttons {{ margin: 20px 0; }}
-        .btn {{ 
-            display: inline-block; 
-            padding: 10px 20px; 
-            margin: 5px; 
-            background-color: #007bff; 
+        .nav-grid {{ 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+            gap: 15px; 
+            margin-bottom: 30px; 
+        }}
+        .nav-btn {{ 
+            display: block; 
+            padding: 15px; 
+            background: #007bff; 
             color: white; 
             text-decoration: none; 
-            border-radius: 5px; 
-            transition: background-color 0.3s;
+            border-radius: 8px; 
+            text-align: center; 
+            font-weight: bold;
+            transition: all 0.3s ease;
         }}
-        .btn:hover {{ background-color: #0056b3; }}
-        .logs {{ 
-            background-color: #1e1e1e; 
-            color: #f8f8f2; 
-            padding: 15px; 
-            border-radius: 5px; 
+        .nav-btn:hover {{ 
+            background: #0056b3; 
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,123,255,0.3);
+        }}
+        .output-box {{ 
+            background: #1e1e1e; 
+            color: #00ff00; 
+            padding: 20px; 
+            border-radius: 8px; 
             font-family: 'Courier New', monospace; 
-            font-size: 12px;
-            max-height: 400px; 
-            overflow-y: auto; 
+            font-size: 14px;
             white-space: pre-wrap;
-            line-height: 1.4;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 2px solid #333;
         }}
         .info-grid {{ 
             display: grid; 
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); 
-            gap: 15px; 
+            gap: 20px; 
+            margin: 20px 0; 
         }}
         .info-item {{ 
-            background: #f8f9fa; 
-            padding: 15px; 
-            border-radius: 5px; 
-            border-left: 4px solid #007bff; 
+            background: white; 
+            padding: 20px; 
+            border-radius: 8px; 
+            border: 1px solid #eee;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
         }}
-        .refresh-note {{ 
+        .info-item h3 {{ color: #333; margin-bottom: 10px; }}
+        .status-badge {{ 
+            display: inline-block; 
+            padding: 5px 12px; 
+            background: #28a745; 
+            color: white; 
+            border-radius: 20px; 
+            font-size: 12px; 
+            font-weight: bold;
+        }}
+        .footer {{ 
             text-align: center; 
-            color: #6c757d; 
-            font-size: 14px; 
-            margin-top: 20px; 
+            color: #666; 
+            padding: 20px; 
+            background: #f8f9fa;
+            border-top: 1px solid #eee;
         }}
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>🤖 Nbot Control Panel</h1>
-        <p>Real-time monitoring and control interface</p>
-    </div>
-    
-    <div class="nav-buttons">
-        <a href="/" class="btn">🏠 Dashboard</a>
-        <a href="/stats" class="btn">📊 JSON Stats</a>
-        <a href="/logs" class="btn">📋 Raw Logs</a>
-        <a href="/run" class="btn">▶️ Run Nbot</a>
-        <a href="/health" class="btn">❤️ Health Check</a>
-    </div>
-    
-    <div class="card">
-        <h3>📈 System Status</h3>
-        <div class="info-grid">
-            <div class="info-item">
-                <strong>Server Status:</strong><br>
-                <span class="status-good">{status['server_status'].upper()}</span>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 Nbot 控制台</h1>
+            <p>实时监控和控制面板</p>
+        </div>
+        
+        <div class="content">
+            <div class="status-card">
+                <h2>📊 系统状态 <span class="status-badge">运行中</span></h2>
+                <p><strong>当前时间:</strong> {current_time}</p>
+                <p><strong>Python版本:</strong> {sys.version.split()[0]}</p>
+                <p><strong>环境:</strong> Vercel Serverless</p>
             </div>
-            <div class="info-item">
-                <strong>Python Version:</strong><br>
-                {sys.version.split()[0]}
+            
+            <div class="nav-grid">
+                <a href="/stats" class="nav-btn">📈 JSON 状态</a>
+                <a href="/run" class="nav-btn">▶️ 运行 Nbot</a>
+                <a href="/health" class="nav-btn">❤️ 健康检查</a>
+                <a href="/" class="nav-btn">🔄 刷新页面</a>
             </div>
-            <div class="info-item">
-                <strong>Current Time:</strong><br>
-                {datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")}
-            </div>
-            <div class="info-item">
-                <strong>Log Entries:</strong><br>
-                {status['log_lines']} lines
+            
+            <div class="info-grid">
+                <div class="info-item">
+                    <h3>🔥 最新执行结果</h3>
+                    <div class="output-box">{nbot_result}</div>
+                </div>
+                
+                <div class="info-item">
+                    <h3>📋 快速操作</h3>
+                    <p>• 点击上方按钮进行各种操作</p>
+                    <p>• 页面每30秒自动刷新</p>
+                    <p>• 支持 GET/POST API 调用</p>
+                    <p>• 实时显示 Nbot 执行状态</p>
+                </div>
             </div>
         </div>
-    </div>
-    
-    <div class="card">
-        <h3>🔥 Latest Execution</h3>
-        <div class="logs">{latest_run}</div>
-    </div>
-    
-    <div class="card">
-        <h3>📝 Recent Activity Log</h3>
-        <div class="logs">{'<br>'.join(status['recent_logs']) if status['recent_logs'] else 'No recent activity...'}</div>
-    </div>
-    
-    <div class="refresh-note">
-        🔄 页面每30秒自动刷新 | 📡 实时监控 Nbot 状态
+        
+        <div class="footer">
+            <p>🔄 页面每30秒自动刷新 | 🚀 Powered by Vercel</p>
+        </div>
     </div>
 </body>
-</html>
-                '''
-                
-                return {
-                    'statusCode': 200,
-                    'headers': {'Content-Type': 'text/html; charset=utf-8'},
-                    'body': html_content
-                }
-        
-        elif method == 'POST':
-            try:
-                # 处理 POST 请求
-                body = getattr(request, 'body', b'')
-                if isinstance(body, bytes):
-                    body = body.decode('utf-8')
-                
-                data = json.loads(body) if body else {}
-                action = data.get('action', 'test')
-                message = data.get('message', 'Hello from API')
-                
-                # 运行 Nbot
-                result = run_nbot_once(action, message)
-                
-                return {
-                    'statusCode': 200,
-                    'headers': {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    },
-                    'body': json.dumps({
-                        'success': True,
-                        'action': action,
-                        'message': message,
-                        'result': result,
-                        'timestamp': datetime.now().isoformat()
-                    })
-                }
-                
-            except Exception as e:
-                return {
-                    'statusCode': 500,
-                    'headers': {'Content-Type': 'application/json'},
-                    'body': json.dumps({'error': f'POST error: {str(e)}'})
-                }
-        
-        else:
-            return {
-                'statusCode': 405,
-                'headers': {'Content-Type': 'application/json'},
-                'body': json.dumps({'error': 'Method not allowed'})
-            }
-            
-    except Exception as e:
-        return {
-            'statusCode': 500,
-            'headers': {'Content-Type': 'application/json'},
-            'body': json.dumps({
-                'error': f'Server error: {str(e)}',
-                'python_version': sys.version,
-                'timestamp': datetime.now().isoformat()
-            })
-        }
+</html>'''
 
-# 本地测试
+# 为了本地测试
 if __name__ == '__main__':
-    print("Testing Nbot server...")
-    test_result = run_nbot_once("test", "local_test")
-    print(f"Test result: {test_result}")
+    # 模拟 Vercel 事件
+    test_event = {{
+        'httpMethod': 'GET',
+        'path': '/',
+        'queryStringParameters': None
+    }}
+    
+    result = handler(test_event)
+    print(f"Status: {{result['statusCode']}}")
+    print(f"Content-Type: {{result['headers']['Content-Type']}}")
