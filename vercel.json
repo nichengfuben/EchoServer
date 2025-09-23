@@ -1,7 +1,18 @@
 {
-  "functions": {
-    "api/vercel_server.py": {
-      "runtime": "python3.13"
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/vercel_server.py",
+      "use": "@vercel/python@4.3.1",
+      "config": {
+        "runtime": "python3.13"
+      }
     }
-  }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/api/vercel_server.py"
+    }
+  ]
 }
