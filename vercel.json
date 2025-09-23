@@ -1,14 +1,19 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "api/vercel_server.py",
-      "use": "@vercel/python"
+  "functions": {
+    "api/vercel_server.py": {
+      "runtime": "python3.9",
+      "maxDuration": 30,
+      "memory": 1024
     }
-  ],
+  },
   "routes": [
     {
       "src": "/api/vercel_server/(.*)",
+      "dest": "/api/vercel_server.py"
+    },
+    {
+      "src": "/api/vercel_server",
       "dest": "/api/vercel_server.py"
     },
     {
@@ -16,20 +21,18 @@
       "dest": "/api/vercel_server.py"
     },
     {
+      "src": "/test",
+      "dest": "/api/vercel_server.py"
+    },
+    {
       "src": "/",
       "dest": "/api/vercel_server.py"
     }
   ],
-  "functions": {
-    "api/vercel_server.py": {
-      "maxDuration": 30,
-      "memory": 1024,
-      "runtime": "python3.9"
-    }
-  },
   "env": {
     "VERCEL_DEPLOYMENT": "true",
-    "PYTHONPATH": "."
+    "PYTHONPATH": ".",
+    "NBOT_ENV": "production"
   },
   "headers": [
     {
@@ -45,9 +48,19 @@
         },
         {
           "key": "Access-Control-Allow-Headers",
-          "value": "Content-Type, Authorization"
+          "value": "Content-Type, Authorization, X-Requested-With"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "s-maxage=0"
         }
       ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/nbot",
+      "destination": "/api/vercel_server.py"
     }
   ]
 }
