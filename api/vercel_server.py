@@ -8,116 +8,27 @@ import os
 import sys
 import json
 import subprocess
-from http.server import BaseHTTPRequestHandler
+from urllib.parse import parse_qs
 
-class VercelHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        """处理 GET 请求"""
-        if self.path == '/health':
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({'status': 'ok', 'message': 'Nbot server is running'}).encode())
-        else:
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-            self.wfile.write(b'''
-                <html>
-                    <head><title>Nbot Server</title></head>
-                    <body>
-                        <h1>Nbot 0.4.0 Server</h1>
-                        <p>Server is running successfully!</p>
-                        <p><a href="/api/vercel_server?action=test">Test Bot</a></p>
-                    </body>
-                </html>
-            ''')
-    
-    def do_POST(self):
-        """处理 POST 请求"""
-        content_length = int(self.headers.get('Content-Length', 0))
-        post_data = self.rfile.read(content_length)
-        
-        try:
-            data = json.loads(post_data.decode('utf-8'))
-            action = data.get('action', 'chat')
-            message = data.get('message', 'Hello')
-            
-            # 运行 Nbot 功能
-            result = self.run_nbot(action, message)
-            
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            self.wfile.write(json.dumps({
-                'status': 'success',
-                'action': action,
-                'result': result
-            }).encode())
-            
-        except Exception as e:
-            self.send_error(500, f"Error processing request: {str(e)}")
-    
-    def run_nbot(self, action, message):
-        """直接运行 Nbot Python 文件"""
-        try:
-            # 找到 Nbot 核心文件路径
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            nbot_path = os.path.join(script_dir, '..', 'core', 'Nbot-for-have-a-hold.py')
-            
-            # 如果路径不存在，尝试其他可能的路径
-            if not os.path.exists(nbot_path):
-                nbot_path = os.path.join(script_dir, 'Nbot-for-have-a-hold.py')
-            
-            if not os.path.exists(nbot_path):
-                nbot_path = os.path.join(script_dir, '..', 'Nbot-for-have-a-hold.py')
-            
-            if not os.path.exists(nbot_path):
-                return f"Error: Nbot-for-have-a-hold.py not found"
-            
-            # 设置环境变量
-            env = os.environ.copy()
-            env['VERCEL_DEPLOYMENT'] = 'true'
-            env['NBOT_ACTION'] = action
-            env['NBOT_MESSAGE'] = message
-            
-            # 直接运行 Python 文件
-            result = subprocess.run(
-                [sys.executable, nbot_path],
-                capture_output=True,
-                text=True,
-                timeout=30,  # 30秒超时
-                env=env,
-                cwd=os.path.dirname(nbot_path)
-            )
-            
-            if result.returncode == 0:
-                # 成功执行
-                output = result.stdout.strip()
-                if output:
-                    return output
-                else:
-                    return f"Nbot executed successfully for action: {action}, message: {message}"
-            else:
-                # 执行出错
-                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
-                return f"Error executing Nbot: {error_msg}"
-                
-        except subprocess.TimeoutExpired:
-            return "Error: Nbot execution timeout (30s)"
-        except Exception as e:
-            return f"Error running Nbot: {str(e)}"
-
-def handler(request, context):
-    """Vercel Serverless 函数处理程序"""
+def handler(request):
+    """Vercel Serverless 函数处理程序 - 标准入口点"""
     try:
-        if request.method == 'GET':
-            if hasattr(request, 'path') and '/health' in request.path:
+        # 获取请求方法
+        method = getattr(request, 'method', 'GET')
+        
+        if method == 'GET':
+            # 获取路径
+            path = getattr(request, 'path', '/')
+            
+            if '/health' in path:
                 return {
                     'statusCode': 200,
                     'headers': {'Content-Type': 'application/json'},
-                    'body': json.dumps({'status': 'ok', 'message': 'Nbot server is running'})
+                    'body': json.dumps({
+                        'status': 'ok', 
+                        'message': 'Nbot server is running',
+                        'python_version': sys.version
+                    })
                 }
             else:
                 return {
@@ -129,28 +40,26 @@ def handler(request, context):
                             <body>
                                 <h1>Nbot 0.4.0 Server</h1>
                                 <p>Server is running successfully on Vercel!</p>
+                                <p>Python version: ''' + sys.version + '''</p>
                                 <p>Use POST requests to interact with the bot.</p>
-                                <p>Example: POST {"action": "chat", "message": "Hello"}</p>
+                                <p><a href="/health">Health Check</a></p>
                             </body>
                         </html>
                     '''
                 }
         
-        elif request.method == 'POST':
+        elif method == 'POST':
             try:
                 # 获取请求体
-                body = getattr(request, 'body', '')
-                if hasattr(request, 'get_json'):
-                    data = request.get_json() or {}
-                else:
-                    if isinstance(body, bytes):
-                        body = body.decode('utf-8')
-                    data = json.loads(body) if body else {}
+                body = getattr(request, 'body', b'')
+                if isinstance(body, bytes):
+                    body = body.decode('utf-8')
                 
+                data = json.loads(body) if body else {}
                 action = data.get('action', 'chat')
                 message = data.get('message', 'Hello')
                 
-                # 直接运行 Nbot
+                # 运行 Nbot
                 result = run_nbot_direct(action, message)
                 
                 return {
@@ -162,7 +71,9 @@ def handler(request, context):
                     'body': json.dumps({
                         'status': 'success',
                         'action': action,
-                        'result': result
+                        'message': message,
+                        'result': result,
+                        'python_version': sys.version
                     })
                 }
                 
@@ -170,7 +81,10 @@ def handler(request, context):
                 return {
                     'statusCode': 500,
                     'headers': {'Content-Type': 'application/json'},
-                    'body': json.dumps({'error': f'Processing error: {str(e)}'})
+                    'body': json.dumps({
+                        'error': f'POST processing error: {str(e)}',
+                        'python_version': sys.version
+                    })
                 }
         
         else:
@@ -184,7 +98,10 @@ def handler(request, context):
         return {
             'statusCode': 500,
             'headers': {'Content-Type': 'application/json'},
-            'body': json.dumps({'error': f'Server error: {str(e)}'})
+            'body': json.dumps({
+                'error': f'Server error: {str(e)}',
+                'python_version': sys.version
+            })
         }
 
 def run_nbot_direct(action, message):
@@ -208,7 +125,7 @@ def run_nbot_direct(action, message):
                 break
         
         if not nbot_path:
-            return "Error: Nbot-for-have-a-hold.py not found in any expected location"
+            return f"Error: Nbot-for-have-a-hold.py not found. Searched paths: {possible_paths}"
         
         # 设置环境变量
         env = os.environ.copy()
@@ -221,7 +138,7 @@ def run_nbot_direct(action, message):
             [sys.executable, nbot_path],
             capture_output=True,
             text=True,
-            timeout=25,  # 25秒超时，给 Vercel 留余量
+            timeout=25,  # 25秒超时
             env=env,
             cwd=os.path.dirname(nbot_path)
         )
@@ -240,28 +157,20 @@ def run_nbot_direct(action, message):
     except Exception as e:
         return f"Unexpected error: {str(e)}"
 
+# 为了兼容性，也保留旧的处理方式
+def app(environ, start_response):
+    """WSGI 兼容入口"""
+    return handler(environ)
 
-# 用于本地测试
+# 本地测试
 if __name__ == '__main__':
-    from http.server import HTTPServer
-    import threading
+    # 模拟请求对象进行测试
+    class MockRequest:
+        def __init__(self):
+            self.method = 'GET'
+            self.path = '/health'
+            self.body = b''
     
-    def test_nbot():
-        """测试 Nbot 执行"""
-        print("Testing Nbot execution...")
-        result = run_nbot_direct("test", "Hello World")
-        print(f"Test result: {result}")
-    
-    # 启动测试
-    test_thread = threading.Thread(target=test_nbot)
-    test_thread.start()
-    
-    # 启动服务器
-    server = HTTPServer(('localhost', 8000), VercelHandler)
-    print("Starting server on http://localhost:8000")
-    print("Test endpoint: http://localhost:8000/health")
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\nServer stopped")
-        server.shutdown()
+    test_request = MockRequest()
+    response = handler(test_request)
+    print("Test response:", response)
