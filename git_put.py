@@ -28,10 +28,4 @@ for cmd in commands:
     
     process.wait()
     
-    if process.returncode != 0:
-        print(f"❌ 命令执行失败: {cmd}")
-        break
-    else:
-        print(f"✅ 命令执行成功")
-    
     print()  # 空行分隔
