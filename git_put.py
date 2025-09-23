@@ -1,6 +1,7 @@
 import os
 
 commands = [
+    'cd /d "E:\\我的\\python\\new\\Nbot0.4.0 - SERVER"'
     "git init",
     "git add .",
     "git commit -m \"first commit\"",
