@@ -32,6 +32,14 @@ class handler(BaseHTTPRequestHandler):
                 })
             elif '/logs' in path:
                 self.send_text_response('\n'.join(self.execution_log))
+            elif '/test-install' in path:
+                # 测试安装 ollama
+                result = self.smart_install_package('ollama')
+                self.send_json_response({
+                    'test_install': 'ollama',
+                    'success': result,
+                    'log': self.execution_log[-5:]
+                })
             else:
                 self.send_html_response(self.create_smart_dashboard())
         except Exception as e:
@@ -66,102 +74,172 @@ class handler(BaseHTTPRequestHandler):
         print(log_entry)
         
         # 保持日志大小限制
-        if len(self.execution_log) > 100:
-            self.execution_log = self.execution_log[-100:]
+        if len(self.execution_log) > 150:
+            self.execution_log = self.execution_log[-150:]
     
     def extract_missing_modules(self, error_text):
-        """从错误信息中提取缺失的模块"""
+        """从错误信息中提取缺失的模块 - 增强版"""
         missing_modules = set()
         
-        # 常见的 ImportError 模式
+        self.log_execution(f"🔍 分析错误信息: {error_text[:100]}...")
+        
+        # 更精确的模式匹配
         patterns = [
             r"ModuleNotFoundError: No module named '([^']+)'",
-            r"ImportError: No module named '([^']+)'",
+            r"ImportError: No module named '?([^'\s]+)'?",
             r"ImportError: cannot import name '([^']+)'",
-            r"from ([a-zA-Z_][a-zA-Z0-9_]*) import",
-            r"import ([a-zA-Z_][a-zA-Z0-9_]*)",
+            r"from\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+import",
+            r"import\s+([a-zA-Z_][a-zA-Z0-9_]*)",
         ]
         
         for pattern in patterns:
-            matches = re.findall(pattern, error_text)
+            matches = re.findall(pattern, error_text, re.IGNORECASE)
             for match in matches:
-                # 清理模块名
-                module = match.split('.')[0]  # 取主模块名
-                if module and not module.startswith('_') and len(module) > 1:
+                module = match.split('.')[0].strip()
+                if module and len(module) > 1 and not module.startswith('_'):
                     missing_modules.add(module)
+                    self.log_execution(f"📦 检测到缺失模块: {module}")
         
-        # 特殊处理常见错误
-        if 'requests' in error_text.lower():
-            missing_modules.add('requests')
-        if 'dotenv' in error_text.lower():
-            missing_modules.add('python-dotenv')
-        if 'httpx' in error_text.lower():
-            missing_modules.add('httpx')
-        if 'websocket' in error_text.lower():
-            missing_modules.add('websocket-client')
-        if 'yaml' in error_text.lower():
-            missing_modules.add('pyyaml')
-        if 'bs4' in error_text.lower() or 'beautifulsoup' in error_text.lower():
-            missing_modules.add('beautifulsoup4')
-        if 'PIL' in error_text or 'pillow' in error_text.lower():
-            missing_modules.add('pillow')
-        if 'cv2' in error_text:
-            missing_modules.add('opencv-python')
-        if 'numpy' in error_text.lower():
-            missing_modules.add('numpy')
-        if 'pandas' in error_text.lower():
-            missing_modules.add('pandas')
+        # 特殊模块映射 - 扩展版
+        special_mappings = {
+            'requests': 'requests',
+            'dotenv': 'python-dotenv',
+            'httpx': 'httpx',
+            'websocket': 'websocket-client',
+            'yaml': 'pyyaml',
+            'bs4': 'beautifulsoup4',
+            'PIL': 'pillow',
+            'cv2': 'opencv-python',
+            'numpy': 'numpy',
+            'pandas': 'pandas',
+            'ollama': 'ollama',  # 重点添加
+            'openai': 'openai',
+            'anthropic': 'anthropic',
+            'transformers': 'transformers',
+            'torch': 'torch',
+            'tensorflow': 'tensorflow',
+            'sklearn': 'scikit-learn',
+            'skimage': 'sciite-image',
+        }
         
-        return list(missing_modules)
+        for key, value in special_mappings.items():
+            if key.lower() in error_text.lower():
+                missing_modules.add(value)
+                self.log_execution(f"🎯 特殊映射检测: {key} -> {value}")
+        
+        result = list(missing_modules)
+        self.log_execution(f"🔍 最终检测到缺失模块: {result}")
+        return result
     
     def smart_install_package(self, package_name):
-        """智能安装包"""
+        """智能安装包 - 增强版"""
         try:
-            self.log_execution(f"🔄 正在安装 {package_name}...")
+            self.log_execution(f"🚀 开始安装 {package_name}...")
             
-            # 尝试安装
-            result = subprocess.run(
+            # 多种安装策略
+            install_commands = [
+                # 策略1: 标准安装
                 [sys.executable, '-m', 'pip', 'install', '--user', '--no-warn-script-location', package_name],
-                capture_output=True,
-                text=True,
-                timeout=120
-            )
+                # 策略2: 强制重新安装
+                [sys.executable, '-m', 'pip', 'install', '--user', '--no-warn-script-location', '--force-reinstall', package_name],
+                # 策略3: 不使用缓存
+                [sys.executable, '-m', 'pip', 'install', '--user', '--no-warn-script-location', '--no-cache-dir', package_name],
+                # 策略4: 使用 --break-system-packages (如果需要)
+                [sys.executable, '-m', 'pip', 'install', '--break-system-packages', package_name],
+            ]
             
-            if result.returncode == 0:
-                self.log_execution(f"✅ {package_name} 安装成功")
-                self.installed_packages.add(package_name)
-                return True
-            else:
-                # 尝试常见的包名变体
-                alternatives = self.get_package_alternatives(package_name)
-                for alt_name in alternatives:
-                    self.log_execution(f"🔄 尝试替代包名: {alt_name}")
-                    alt_result = subprocess.run(
+            for i, cmd in enumerate(install_commands):
+                try:
+                    self.log_execution(f"🔄 尝试安装策略 {i+1}: {' '.join(cmd[-3:])}")
+                    
+                    result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=180  # 增加超时时间
+                    )
+                    
+                    if result.returncode == 0:
+                        self.log_execution(f"✅ {package_name} 安装成功 (策略 {i+1})")
+                        self.installed_packages.add(package_name)
+                        
+                        # 验证安装
+                        if self.verify_installation(package_name):
+                            self.log_execution(f"✅ {package_name} 安装验证成功")
+                            return True
+                        else:
+                            self.log_execution(f"⚠️ {package_name} 安装成功但验证失败")
+                    else:
+                        error_msg = result.stderr.strip() if result.stderr else "未知错误"
+                        self.log_execution(f"❌ 策略 {i+1} 失败: {error_msg[:100]}")
+                        
+                except subprocess.TimeoutExpired:
+                    self.log_execution(f"⏰ 策略 {i+1} 超时")
+                    continue
+                except Exception as e:
+                    self.log_execution(f"💥 策略 {i+1} 异常: {str(e)}")
+                    continue
+            
+            # 如果标准名称失败，尝试替代包名
+            alternatives = self.get_package_alternatives(package_name)
+            for alt_name in alternatives:
+                self.log_execution(f"🔄 尝试替代包名: {alt_name}")
+                try:
+                    result = subprocess.run(
                         [sys.executable, '-m', 'pip', 'install', '--user', '--no-warn-script-location', alt_name],
                         capture_output=True,
                         text=True,
-                        timeout=120
+                        timeout=180
                     )
-                    if alt_result.returncode == 0:
+                    if result.returncode == 0:
                         self.log_execution(f"✅ {alt_name} 安装成功")
                         self.installed_packages.add(alt_name)
                         return True
-                
-                error_msg = result.stderr.strip() if result.stderr else "未知错误"
-                self.log_execution(f"❌ {package_name} 安装失败: {error_msg}")
-                return False
-                
-        except subprocess.TimeoutExpired:
-            self.log_execution(f"⏰ {package_name} 安装超时")
+                except Exception as e:
+                    self.log_execution(f"❌ {alt_name} 安装失败: {str(e)}")
+                    continue
+            
+            self.log_execution(f"❌ {package_name} 所有安装策略都失败了")
             return False
+                
         except Exception as e:
-            self.log_execution(f"💥 {package_name} 安装异常: {str(e)}")
+            self.log_execution(f"💥 {package_name} 安装过程出现异常: {str(e)}")
+            return False
+    
+    def verify_installation(self, package_name):
+        """验证包是否正确安装"""
+        try:
+            # 尝试导入包来验证安装
+            import importlib
+            
+            # 处理包名映射
+            import_names = {
+                'python-dotenv': 'dotenv',
+                'beautifulsoup4': 'bs4',
+                'pillow': 'PIL',
+                'opencv-python': 'cv2',
+                'scikit-learn': 'sklearn',
+                'scikit-image': 'skimage',
+                'websocket-client': 'websocket',
+                'pyyaml': 'yaml',
+            }
+            
+            import_name = import_names.get(package_name, package_name)
+            
+            # 尝试导入
+            importlib.import_module(import_name)
+            return True
+            
+        except ImportError:
+            return False
+        except Exception:
             return False
     
     def get_package_alternatives(self, module_name):
-        """获取模块的可能包名"""
+        """获取模块的可能包名 - 扩展版"""
         alternatives = {
-            'cv2': ['opencv-python', 'opencv-contrib-python'],
+            'ollama': ['ollama-python', 'python-ollama'],  # 重点添加 ollama 的替代名
+            'cv2': ['opencv-python', 'opencv-contrib-python', 'cv2'],
             'PIL': ['pillow', 'Pillow'],
             'bs4': ['beautifulsoup4', 'BeautifulSoup4'],
             'yaml': ['pyyaml', 'PyYAML'],
@@ -171,75 +249,89 @@ class handler(BaseHTTPRequestHandler):
             'skimage': ['scikit-image'],
             'pymongo': ['pymongo'],
             'psycopg2': ['psycopg2-binary'],
+            'openai': ['openai'],
+            'anthropic': ['anthropic'],
         }
         
         return alternatives.get(module_name, [f"{module_name}2", f"py{module_name}", f"{module_name}-python"])
     
-    def smart_run_nbot(self, action='status', message='test', max_retries=3):
-        """智能运行 Nbot，自动处理依赖错误"""
+    def smart_run_nbot(self, action='status', message='test', max_retries=5):
+        """智能运行 Nbot - 增强重试逻辑"""
         nbot_path = self.find_nbot_file()
         if not nbot_path:
+            self.log_execution("❌ Nbot-for-have-a-hold.py 文件未找到")
             return "❌ Nbot-for-have-a-hold.py 文件未找到"
+        
+        self.log_execution(f"📁 找到 Nbot 文件: {nbot_path}")
         
         retry_count = 0
         last_error = ""
+        installed_in_this_run = []
         
         while retry_count < max_retries:
             try:
-                self.log_execution(f"🚀 尝试运行 Nbot (第 {retry_count + 1} 次)")
+                self.log_execution(f"🚀 尝试运行 Nbot (第 {retry_count + 1}/{max_retries} 次)")
                 
                 # 设置环境变量
                 env = os.environ.copy()
                 env['NBOT_ACTION'] = str(action)
                 env['NBOT_MESSAGE'] = str(message)
                 env['PYTHONPATH'] = os.path.dirname(nbot_path) + ':' + env.get('PYTHONPATH', '')
+                env['PYTHONUNBUFFERED'] = '1'
                 
                 # 执行 Nbot
                 process = subprocess.run(
                     [sys.executable, nbot_path],
                     capture_output=True,
                     text=True,
-                    timeout=30,
+                    timeout=45,  # 增加超时时间
                     env=env,
                     cwd=os.path.dirname(nbot_path)
                 )
                 
                 if process.returncode == 0:
                     output = process.stdout.strip()
-                    self.log_execution(f"✅ Nbot 执行成功")
-                    return output or f"✅ Nbot 执行成功 (Action: {action})"
+                    self.log_execution(f"✅ Nbot 执行成功！")
+                    success_msg = output or f"✅ Nbot 执行成功 (Action: {action})"
+                    if installed_in_this_run:
+                        success_msg += f"\n🔧 本次运行安装的包: {', '.join(installed_in_this_run)}"
+                    return success_msg
                 else:
-                    # 分析错误并尝试安装缺失依赖
+                    # 分析错误
                     error_output = process.stderr.strip()
-                    last_error = error_output
+                    if not error_output:
+                        error_output = process.stdout.strip()
                     
-                    self.log_execution(f"❌ Nbot 执行失败: {error_output[:200]}...")
+                    last_error = error_output
+                    self.log_execution(f"❌ Nbot 执行失败 (退出码: {process.returncode})")
+                    self.log_execution(f"错误详情: {error_output[:300]}")
                     
                     # 提取缺失的模块
                     missing_modules = self.extract_missing_modules(error_output)
                     
                     if missing_modules:
-                        self.log_execution(f"🔍 检测到缺失模块: {missing_modules}")
+                        self.log_execution(f"🔧 准备安装缺失模块: {missing_modules}")
                         
                         # 尝试安装缺失的模块
                         installed_any = False
                         for module in missing_modules:
                             if self.smart_install_package(module):
                                 installed_any = True
+                                installed_in_this_run.append(module)
                         
                         if installed_any:
                             retry_count += 1
-                            self.log_execution(f"🔄 已安装依赖，准备重试...")
+                            self.log_execution(f"🔄 已安装依赖，准备重试 (第 {retry_count + 1} 次)...")
                             continue
                         else:
-                            self.log_execution("❌ 无法安装所需依赖，停止重试")
+                            self.log_execution("❌ 无法安装所需依赖")
                             break
                     else:
-                        self.log_execution("❓ 未检测到缺失模块，可能是其他错误")
+                        self.log_execution("❓ 未检测到缺失模块，可能是其他类型的错误")
                         break
                         
             except subprocess.TimeoutExpired:
-                error_msg = f"⏰ Nbot 执行超时 (30秒)"
+                error_msg = f"⏰ Nbot 执行超时 (45秒)"
                 self.log_execution(error_msg)
                 return error_msg
             except Exception as e:
@@ -250,7 +342,11 @@ class handler(BaseHTTPRequestHandler):
             retry_count += 1
         
         # 所有重试都失败了
-        final_error = f"❌ Nbot 执行失败，已重试 {max_retries} 次。最后错误: {last_error[:300]}"
+        final_error = f"❌ Nbot 执行失败，已重试 {max_retries} 次。\n"
+        if installed_in_this_run:
+            final_error += f"🔧 本次运行安装的包: {', '.join(installed_in_this_run)}\n"
+        final_error += f"最后错误: {last_error[:500]}"
+        
         self.log_execution(final_error)
         return final_error
     
@@ -278,7 +374,8 @@ class handler(BaseHTTPRequestHandler):
             'nbot_file_found': self.find_nbot_file() is not None,
             'execution_log_lines': len(self.execution_log),
             'installed_packages': list(self.installed_packages),
-            'installed_count': len(self.installed_packages)
+            'installed_count': len(self.installed_packages),
+            'recent_log': self.execution_log[-10:] if self.execution_log else []
         }
     
     def create_smart_dashboard(self):
@@ -291,7 +388,7 @@ class handler(BaseHTTPRequestHandler):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🤖 Nbot 智能自适应控制台</title>
+    <title>🤖 Nbot 智能自适应控制台 v2.0</title>
     <meta http-equiv="refresh" content="45">
     <style>
         body {{ 
@@ -320,6 +417,8 @@ class handler(BaseHTTPRequestHandler):
         .nav-btn:hover {{ background: #0056b3; transform: translateY(-2px); }}
         .nav-btn.run {{ background: #28a745; }}
         .nav-btn.run:hover {{ background: #218838; }}
+        .nav-btn.test {{ background: #ffc107; color: #000; }}
+        .nav-btn.test:hover {{ background: #e0a800; }}
         .status-card {{ 
             background: linear-gradient(135deg, #f8f9fa, #e9ecef); 
             padding: 25px; border-radius: 12px; 
@@ -356,13 +455,14 @@ class handler(BaseHTTPRequestHandler):
             background: #28a745; border-radius: 50%; margin-right: 8px;
             animation: pulse 2s infinite;
         }}
+        .error-highlight {{ background: #fff3cd; padding: 10px; border-radius: 5px; margin: 10px 0; }}
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🧠 Nbot 智能自适应控制台</h1>
-            <p><span class="smart-indicator"></span>自动错误检测 | 智能依赖安装 | 自适应运行</p>
+            <h1>🧠 Nbot 智能自适应控制台 v2.0</h1>
+            <p><span class="smart-indicator"></span>增强错误检测 | Ollama 支持 | 多重安装策略</p>
         </div>
         
         <div class="content">
@@ -379,20 +479,30 @@ class handler(BaseHTTPRequestHandler):
             <!-- 快捷操作 -->
             <div style="text-align: center; margin: 25px 0;">
                 <button onclick="runNbot()" class="nav-btn run">🚀 智能运行 Nbot</button>
+                <button onclick="testInstall()" class="nav-btn test">🧪 测试安装 Ollama</button>
                 <a href="/api/index/stats" class="nav-btn">📊 详细统计</a>
                 <a href="/api/index/logs" class="nav-btn">📋 执行日志</a>
                 <a href="/api/index" class="nav-btn">🔄 刷新状态</a>
             </div>
             
+            <!-- Ollama 特别说明 -->
+            <div class="error-highlight">
+                <h4>🎯 Ollama 支持增强</h4>
+                <p>• 自动检测 ollama 模块缺失</p>
+                <p>• 多重安装策略确保成功</p>
+                <p>• 包名变体自动尝试: ollama, ollama-python, python-ollama</p>
+                <p>• 增加安装验证机制</p>
+            </div>
+            
             <!-- 详细信息网格 -->
             <div class="grid">
                 <div class="card">
-                    <h4>🧠 智能特性</h4>
-                    <p>• <strong>自动错误检测:</strong> 智能解析运行时错误</p>
-                    <p>• <strong>智能依赖安装:</strong> 自动识别并安装缺失包</p>
-                    <p>• <strong>多重重试机制:</strong> 自动重试失败的操作</p>
-                    <p>• <strong>包名智能映射:</strong> 处理常见的包名变体</p>
-                    <p>• <strong>实时日志记录:</strong> 详细记录每个操作步骤</p>
+                    <h4>🧠 增强特性 v2.0</h4>
+                    <p>• <strong>增强错误解析:</strong> 更精确的模块名提取</p>
+                    <p>• <strong>多重安装策略:</strong> 4种不同的pip安装方法</p>
+                    <p>• <strong>安装验证:</strong> 自动验证包是否正确安装</p>
+                    <p>• <strong>Ollama 特化:</strong> 专门优化 ollama 包安装</p>
+                    <p>• <strong>扩展重试:</strong> 最多重试5次确保成功</p>
                 </div>
                 
                 <div class="card">
@@ -404,13 +514,13 @@ class handler(BaseHTTPRequestHandler):
             </div>
             
             <!-- 最近执行日志 -->
-            {f'''<div class="card">
+            <div class="card">
                 <h4>📋 最近执行日志</h4>
-                <div class="log-box">{"<br>".join(self.execution_log[-15:]) if self.execution_log else "暂无执行记录...<br>点击上方按钮开始智能运行！"}</div>
-            </div>''' if True else ''}
+                <div class="log-box">{"<br>".join(self.execution_log[-20:]) if self.execution_log else "暂无执行记录...<br>点击上方按钮开始智能运行！"}</div>
+            </div>
             
             <div style="text-align: center; margin-top: 30px; color: #666;">
-                <p>🧠 智能自适应系统已激活 | 🔄 页面每45秒自动刷新</p>
+                <p>🧠 智能自适应系统 v2.0 已激活 | 🔄 页面每45秒自动刷新</p>
             </div>
         </div>
     </div>
@@ -434,6 +544,29 @@ class handler(BaseHTTPRequestHandler):
                 alert('请求失败: ' + error.message);
             }} finally {{
                 btn.textContent = '🚀 智能运行 Nbot';
+                btn.disabled = false;
+                setTimeout(() => location.reload(), 2000);
+            }}
+        }}
+        
+        async function testInstall() {{
+            const btn = event.target;
+            btn.textContent = '🔄 正在安装...';
+            btn.disabled = true;
+            
+            try {{
+                const response = await fetch('/api/index/test-install');
+                const data = await response.json();
+                
+                if (data.success) {{
+                    alert('Ollama 安装成功！\\n请查看日志了解详情');
+                }} else {{
+                    alert('Ollama 安装失败\\n请查看日志了解详情');
+                }}
+            }} catch (error) {{
+                alert('请求失败: ' + error.message);
+            }} finally {{
+                btn.textContent = '🧪 测试安装 Ollama';
                 btn.disabled = false;
                 setTimeout(() => location.reload(), 2000);
             }}
