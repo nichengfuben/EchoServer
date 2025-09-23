@@ -1,7 +1,7 @@
 {
   "functions": {
     "api/vercel_server.py": {
-      "maxDuration": 30
+      "runtime": "python3.13"
     }
   }
 }
