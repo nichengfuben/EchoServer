@@ -20,7 +20,7 @@ for cmd in commands:
                               stdout=subprocess.PIPE,
                               stderr=subprocess.STDOUT,
                               text=True, bufsize=1,
-                              encoding='gbk')  # 添加编码参数
+                              encoding='utf-8')  # 添加编码参数
     
     # 实时读取输出
     for line in process.stdout:
