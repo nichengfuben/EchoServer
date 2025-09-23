@@ -240,6 +240,7 @@ def run_nbot_direct(action, message):
     except Exception as e:
         return f"Unexpected error: {str(e)}"
 
+
 # 用于本地测试
 if __name__ == '__main__':
     from http.server import HTTPServer
