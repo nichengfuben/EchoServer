@@ -13,18 +13,12 @@ commands = [
 
 for cmd in commands:
     print(f">>> 执行: {cmd}")
-    
-    # 指定编码为gbk
     process = subprocess.Popen(cmd, shell=True, 
                               stdout=subprocess.PIPE,
                               stderr=subprocess.STDOUT,
                               text=True, bufsize=1,
                               encoding='utf-8')  # 添加编码参数
-    
     # 实时读取输出
     for line in process.stdout:
         print(line, end='')
-    
     process.wait()
-    
-    print()  # 空行分隔
