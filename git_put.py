@@ -15,11 +15,12 @@ for cmd in commands:
     print(f">>> 执行: {cmd}")
     print("-" * 60)
     
-    # 实时输出到控制台
+    # 指定编码为gbk
     process = subprocess.Popen(cmd, shell=True, 
                               stdout=subprocess.PIPE,
                               stderr=subprocess.STDOUT,
-                              text=True, bufsize=1)
+                              text=True, bufsize=1,
+                              encoding='gbk')  # 添加编码参数
     
     # 实时读取输出
     for line in process.stdout:
