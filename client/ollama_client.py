@@ -4,10 +4,16 @@ import time
 from typing import AsyncGenerator, Optional, Dict, Any, List
 from ollama import Client
 
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data.ollama_accounts import *
+
 class OllamaClient:
+    global API_KEY
     def __init__(self, 
                  host: str = "https://ollama.com",
-                 token: Optional[str] = None,
+                 token: Optional[str] = API_KEY,
                  model: str = "gpt-oss:120b",
                  max_concurrent: int = 5):
         """
@@ -192,11 +198,7 @@ class OllamaClient:
 
 # 使用示例
 async def main():
-    client = OllamaClient(
-        host="https://ollama.com",
-        token="2858afc5d9044906a630666be7de7836.kDXQt_XYPxMCXZKN6wRU-lTR",  # 替换为实际token
-        model="gpt-oss:120b"
-    )
+    client = OllamaClient()
     
     # 简单聊天
     response = await client.chat("你好，请介绍一下自己")

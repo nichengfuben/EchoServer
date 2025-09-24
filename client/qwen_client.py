@@ -1188,7 +1188,6 @@ class AsyncQwenClient:
                         chat_id = await self._create_new_chat(account.token, model)
                     except Exception as e:
                         raise Exception(f"创建对话失败: {str(e)}")
-
                     async for chunk in self._send_chat_request(account, chat_id, message, model, files):
                         if first_packet_time is None:
                             first_packet_time = time.time()
@@ -1246,9 +1245,7 @@ class AsyncQwenClient:
         }
         
         payload = self._build_payload(message, chat_id, model, files)
-
         request_url = f"https://chat.qwen.ai/api/v2/chat/completions?chat_id={chat_id}"
-        
         async with self.session.post(
             request_url,
             json=payload,

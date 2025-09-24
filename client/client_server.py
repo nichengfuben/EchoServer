@@ -1,3 +1,4 @@
+#client_server.py
 from quart import Quart, request, jsonify, Response
 from quart_cors import cors
 import asyncio
@@ -8,44 +9,83 @@ import tempfile
 import os
 import random
 import threading
-from typing import AsyncGenerator, Optional, Union, List, Dict, Any, Tuple
+from typing import *
 from concurrent.futures import ThreadPoolExecutor
-import aiofiles
 import logging
-import aiohttp
+import requests
 import base64
 from pathlib import Path
+import io
 
 # 直接集成所有客户端逻辑
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# 判断是否为主程序运行
-_IS_MAIN_MODULE = __name__ == '__main__'
-
+# Qwen 客户端
 try:
     from client.qwen_client import quick_chat, quick_stream, cleanup_client as qwen_cleanup
+except ImportError as e:
+    print(f"导入 Qwen 客户端失败: {e}")
+    quick_chat = quick_stream = qwen_cleanup = None
+
+# Chutes 客户端
+try:
     from client.chutes_client import quick_chat as chutes_chat, quick_chat_stream as chutes_stream
+except ImportError as e:
+    print(f"导入 Chutes 客户端失败: {e}")
+    chutes_chat = chutes_stream = None
+
+# Minimax 客户端
+try:
     from client.minimax_client import chat_non_stream as minimax_chat, chat_stream as minimax_stream
+except ImportError as e:
+    print(f"导入 Minimax 客户端失败: {e}")
+    minimax_chat = minimax_stream = None
+
+# Ollama 客户端
+try:
     from client.ollama_client import OllamaClient
+except ImportError as e:
+    print(f"导入 Ollama 客户端失败: {e}")
+    OllamaClient = None
+
+# Suanli 客户端
+try:
     from client.suanli_client import SuanliClient
+except ImportError as e:
+    print(f"导入 Suanli 客户端失败: {e}")
+    SuanliClient = None
+
+# TTS 客户端
+try:
     from client.tts_client import tts
+except ImportError as e:
+    print(f"导入 TTS 客户端失败: {e}")
+    tts = None
+
+# Embed 客户端
+try:
     from client.embed_client import EmbedClient
+except ImportError as e:
+    print(f"导入 Embed 客户端失败: {e}")
+    EmbedClient = None
+
+# OpenRouter 客户端
+try:
     from client.openrouter_client import quick_chat as openrouter_chat, quick_chat_stream as openrouter_stream
+except ImportError as e:
+    print(f"导入 OpenRouter 客户端失败: {e}")
+    openrouter_chat = openrouter_stream = None
+
+# Cerebras 客户端
+try:
     from client.cerebras_client import quick_chat as cerebras_chat, quick_chat_stream as cerebras_stream
 except ImportError as e:
-    if _IS_MAIN_MODULE:  # 只在主程序运行时打印导入错误
-        print(f"导入客户端模块失败: {e}")
-        print("请确保所有客户端模块都存在")
+    print(f"导入 Cerebras 客户端失败: {e}")
+    cerebras_chat = cerebras_stream = None
 
-# 只在主程序运行时配置日志
-if _IS_MAIN_MODULE:
-    logging.basicConfig(level=logging.INFO)
-else:
-    # 导入时设置为静默模式
-    logging.getLogger().setLevel(logging.CRITICAL + 1)
-
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Quart(__name__)
@@ -178,30 +218,30 @@ class FileProcessor:
     async def download_file(url: str, temp_dir: str) -> str:
         """下载网络文件到本地临时文件"""
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as response:
-                    if response.status == 200:
-                        content = await response.read()
-                        # 从URL或Content-Type推断文件扩展名
-                        content_type = response.headers.get('content-type', '')
-                        if 'image' in content_type:
-                            ext = content_type.split('/')[-1] if '/' in content_type else 'jpg'
-                        elif 'video' in content_type:
-                            ext = content_type.split('/')[-1] if '/' in content_type else 'mp4'
-                        elif 'audio' in content_type:
-                            ext = content_type.split('/')[-1] if '/' in content_type else 'mp3'
-                        elif 'pdf' in content_type:
-                            ext = 'pdf'
-                        else:
-                            # 从URL推断
-                            ext = url.split('.')[-1] if '.' in url else 'bin'
-                        
-                        temp_path = os.path.join(temp_dir, f"{uuid.uuid4().hex}.{ext}")
-                        async with aiofiles.open(temp_path, 'wb') as f:
-                            await f.write(content)
-                        return temp_path
-                    else:
-                        raise Exception(f"下载失败: HTTP {response.status}")
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(None, lambda: requests.get(url, timeout=30))
+            if response.status_code == 200:
+                content = response.content
+                # 从URL或Content-Type推断文件扩展名
+                content_type = response.headers.get('content-type', '')
+                if 'image' in content_type:
+                    ext = content_type.split('/')[-1] if '/' in content_type else 'jpg'
+                elif 'video' in content_type:
+                    ext = content_type.split('/')[-1] if '/' in content_type else 'mp4'
+                elif 'audio' in content_type:
+                    ext = content_type.split('/')[-1] if '/' in content_type else 'mp3'
+                elif 'pdf' in content_type:
+                    ext = 'pdf'
+                else:
+                    # 从URL推断
+                    ext = url.split('.')[-1] if '.' in url else 'bin'
+                
+                temp_path = os.path.join(temp_dir, f"{uuid.uuid4().hex}.{ext}")
+                with open(temp_path, 'wb') as f:
+                    f.write(content)
+                return temp_path
+            else:
+                raise Exception(f"下载失败: HTTP {response.status_code}")
         except Exception as e:
             raise Exception(f"下载文件失败: {str(e)}")
     
@@ -255,37 +295,37 @@ class TimeoutManager:
         """
         self.first_token_timeout = first_token_timeout
     
-    async def wait_for_first_token(self, async_gen: AsyncGenerator) -> AsyncGenerator:
+    async def wait_for_first_token(self, generator) -> AsyncGenerator:
         """
         等待首个token，超时则抛出异常
         
         Args:
-            async_gen: 异步生成器
+            generator: 异步生成器
             
         Returns:
             包装后的异步生成器
             
         Raises:
-            asyncio.TimeoutError: 首包延迟超时
+            TimeoutError: 首包延迟超时
         """
         first_token_received = False
         start_time = time.time()
         
         try:
-            async for chunk in async_gen:
+            async for chunk in generator:
                 if not first_token_received:
                     elapsed = time.time() - start_time
                     if elapsed > self.first_token_timeout:
-                        raise asyncio.TimeoutError(f"首包延迟超时: {elapsed:.2f}s")
+                        raise TimeoutError(f"首包延迟超时: {elapsed:.2f}s")
                     first_token_received = True
                 yield chunk
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise
         except Exception as e:
             if not first_token_received:
                 elapsed = time.time() - start_time
                 if elapsed > self.first_token_timeout:
-                    raise asyncio.TimeoutError(f"首包延迟超时: {elapsed:.2f}s")
+                    raise TimeoutError(f"首包延迟超时: {elapsed:.2f}s")
             raise e
 
 class ClientHandler:
@@ -314,12 +354,12 @@ class ClientHandler:
         self.ollama_client = None
         self.suanli_client = None
         self.embed_client = None
-        self._client_lock = threading.Lock()
+        self._client_lock = asyncio.Lock()
         
         # 临时文件管理
         self.temp_dir = tempfile.mkdtemp()
         self.temp_files = set()
-        self._temp_lock = threading.Lock()
+        self._temp_lock = asyncio.Lock()
         
         # 统计信息
         self.stats = {
@@ -332,38 +372,38 @@ class ClientHandler:
             'direct_model_calls': 0
         }
     
-    def _get_ollama_client(self) -> OllamaClient:
+    async def _get_ollama_client(self) -> OllamaClient:
         """获取Ollama客户端实例（单例模式）"""
         if self.ollama_client is None:
-            with self._client_lock:
+            async with self._client_lock:
                 if self.ollama_client is None:
                     self.ollama_client = OllamaClient()
         return self.ollama_client
     
-    def _get_suanli_client(self) -> SuanliClient:
+    async def _get_suanli_client(self) -> SuanliClient:
         """获取Suanli客户端实例（单例模式）"""
         if self.suanli_client is None:
-            with self._client_lock:
+            async with self._client_lock:
                 if self.suanli_client is None:
                     self.suanli_client = SuanliClient()
         return self.suanli_client
     
-    def _get_embed_client(self) -> EmbedClient:
+    async def _get_embed_client(self) -> EmbedClient:
         """获取嵌入客户端实例（单例模式）"""
         if self.embed_client is None:
-            with self._client_lock:
+            async with self._client_lock:
                 if self.embed_client is None:
                     self.embed_client = EmbedClient()
         return self.embed_client
     
-    def _add_temp_file(self, file_path: str) -> None:
+    async def _add_temp_file(self, file_path: str) -> None:
         """添加临时文件到管理列表"""
-        with self._temp_lock:
+        async with self._temp_lock:
             self.temp_files.add(file_path)
     
-    def _remove_temp_file(self, file_path: str) -> None:
+    async def _remove_temp_file(self, file_path: str) -> None:
         """从管理列表移除临时文件"""
-        with self._temp_lock:
+        async with self._temp_lock:
             self.temp_files.discard(file_path)
             if os.path.exists(file_path):
                 try:
@@ -435,7 +475,7 @@ class ClientHandler:
             len(text) <= model_config.get('max_doc_chars', 0)):
             
             doc_path = FileProcessor.text_to_temp_document(text, model_config.get('max_doc_chars'))
-            self._add_temp_file(doc_path)
+            asyncio.create_task(self._add_temp_file(doc_path))
             return True, doc_path
         return False, None
     
@@ -461,8 +501,10 @@ class ClientHandler:
         
         try:
             if stream:
-                result = quick_stream(text, file_paths)
-                return self.timeout_manager.wait_for_first_token(result)
+                async def async_generator():
+                    async for chunk in quick_stream(text, file_paths):
+                        yield chunk
+                return self.timeout_manager.wait_for_first_token(async_generator())
             else:
                 result = await quick_chat(text, file_paths)
                 return result
@@ -493,8 +535,11 @@ class ClientHandler:
         
         try:
             if stream:
-                result = openrouter_stream(text, image_path)
-                return self.timeout_manager.wait_for_first_token(result)
+                async def async_generator():
+                    async for chunk in openrouter_stream(text, image_path):
+                        yield chunk
+                
+                return self.timeout_manager.wait_for_first_token(async_generator())
             else:
                 result = await openrouter_chat(text, image_path)
                 return result
@@ -516,8 +561,11 @@ class ClientHandler:
         text = self._truncate_text(text, config['context_length'])
         
         if stream:
-            result = cerebras_stream(text)
-            return self.timeout_manager.wait_for_first_token(result)
+            async def async_generator():
+                async for chunk in cerebras_stream(text):
+                    yield chunk
+            
+            return self.timeout_manager.wait_for_first_token(async_generator())
         else:
             return await cerebras_chat(text)
     
@@ -536,8 +584,11 @@ class ClientHandler:
         text = self._truncate_text(text, config['context_length'])
         
         if stream:
-            result = chutes_stream(text)
-            return self.timeout_manager.wait_for_first_token(result)
+            async def async_generator():
+                async for chunk in chutes_stream(text):
+                    yield chunk
+            
+            return self.timeout_manager.wait_for_first_token(async_generator())
         else:
             return await chutes_chat(text)
     
@@ -564,8 +615,11 @@ class ClientHandler:
                 image_path = file_analysis['images'][0]  # 只取第一个图片
         
         if stream:
-            result = minimax_stream(text, image_path)
-            return self.timeout_manager.wait_for_first_token(result)
+            async def async_generator():
+                async for chunk in minimax_stream(text, image_path):
+                    yield chunk
+            
+            return self.timeout_manager.wait_for_first_token(async_generator())
         else:
             return await minimax_chat(text, image_path)
     
@@ -583,11 +637,14 @@ class ClientHandler:
         config = ModelConfig.OLLAMA
         text = self._truncate_text(text, config['context_length'])
         
-        client = self._get_ollama_client()
+        client = await self._get_ollama_client()
         
         if stream:
-            result = client.chat_stream(text)
-            return self.timeout_manager.wait_for_first_token(result)
+            async def async_generator():
+                async for chunk in client.chat_stream(text):
+                    yield chunk
+            
+            return self.timeout_manager.wait_for_first_token(async_generator())
         else:
             return await client.chat(text)
     
@@ -605,18 +662,19 @@ class ClientHandler:
         config = ModelConfig.SUANLI
         text = self._truncate_text(text, config['context_length'])
         
-        client = self._get_suanli_client()
+        client = await self._get_suanli_client()
         
         if stream:
             async def suanli_stream_generator():
-                for chunk in client.chat_stream_generator(text, show_stats=False):
+                loop = asyncio.get_event_loop()
+                for chunk in await loop.run_in_executor(None, lambda: client.chat_stream_generator(text, show_stats=False)):
                     if not chunk.startswith("❌"):
                         yield chunk
             
-            result = suanli_stream_generator()
-            return self.timeout_manager.wait_for_first_token(result)
+            return self.timeout_manager.wait_for_first_token(suanli_stream_generator())
         else:
-            result, _ = client.chat(text, show_stats=False)
+            loop = asyncio.get_event_loop()
+            result, _ = await loop.run_in_executor(None, lambda: client.chat(text, show_stats=False))
             if result is None:
                 raise Exception("Suanli返回None")
             return result
@@ -683,8 +741,7 @@ class ClientHandler:
                         
                     except Exception as e:
                         last_error = e
-                        if _IS_MAIN_MODULE:  # 只在主程序运行时输出警告日志
-                            logger.warning(f"模型 {config['name']} 调用失败 (尝试 {attempt + 1}): {str(e)}")
+                        logger.warning(f"模型 {config['name']} 调用失败 (尝试 {attempt + 1}): {str(e)}")
                         continue
                 
                 # 如果不是最后一次尝试，等待一段时间再重试
@@ -809,9 +866,8 @@ class ClientHandler:
         """
         for attempt in range(retries + 1):
             try:
-                # 在线程池中执行TTS，避免阻塞异步循环
                 loop = asyncio.get_event_loop()
-                result = await loop.run_in_executor(self.thread_pool, tts, text, voice, save_path)
+                result = await loop.run_in_executor(None, lambda: tts(text, voice, save_path))
                 return result
             except Exception as e:
                 if attempt < retries:
@@ -833,10 +889,9 @@ class ClientHandler:
         async with self.embed_semaphore:
             for attempt in range(retries + 1):
                 try:
-                    client = self._get_embed_client()
-                    # 在线程池中执行嵌入，避免阻塞异步循环
+                    client = await self._get_embed_client()
                     loop = asyncio.get_event_loop()
-                    embedding = await loop.run_in_executor(self.thread_pool, client.get_embedding, text)
+                    embedding = await loop.run_in_executor(None, lambda: client.get_embedding(text))
                     return embedding
                 except Exception as e:
                     if attempt < retries:
@@ -844,10 +899,10 @@ class ClientHandler:
                         continue
                     raise e
     
-    def cleanup_temp_files(self, file_paths: List[str]) -> None:
+    async def cleanup_temp_files(self, file_paths: List[str]) -> None:
         """清理临时文件"""
         for file_path in file_paths:
-            self._remove_temp_file(file_path)
+            await self._remove_temp_file(file_path)
     
     def get_stats(self) -> Dict[str, Any]:
         """
@@ -869,9 +924,9 @@ class ClientHandler:
         self.thread_pool.shutdown(wait=True)
         
         # 清理所有临时文件
-        with self._temp_lock:
+        async with self._temp_lock:
             for file_path in list(self.temp_files):
-                self._remove_temp_file(file_path)
+                await self._remove_temp_file(file_path)
             
             # 删除临时目录
             try:
@@ -886,13 +941,13 @@ class ClientHandler:
 
 # 全局处理器实例
 _global_handler = None
-_handler_lock = threading.Lock()
+_handler_lock = asyncio.Lock()
 
-def get_handler() -> ClientHandler:
+async def get_handler() -> ClientHandler:
     """获取全局处理器实例（单例模式）"""
     global _global_handler
     if _global_handler is None:
-        with _handler_lock:
+        async with _handler_lock:
             if _global_handler is None:
                 _global_handler = ClientHandler()
     return _global_handler
@@ -1072,8 +1127,7 @@ def extract_files_from_messages(messages: List[Dict], format_type: str = "openai
                                         f.write(base64.b64decode(data))
                                     file_urls.append(temp_path)
                                 except Exception as e:
-                                    if _IS_MAIN_MODULE:  # 只在主程序运行时输出警告
-                                        logger.warning(f"处理base64文件失败: {str(e)}")
+                                    logger.warning(f"处理base64文件失败: {str(e)}")
     
     return file_urls
 
@@ -1101,19 +1155,19 @@ async def chat_completions():
         if not text_content.strip():
             return jsonify(create_error_response("invalid_request", "消息内容为空", 400)), 400
         
-        handler = get_handler()
+        handler = await get_handler()
         
         # 处理文件上传
         file_urls = []
-        form = await request.files
-        if form:
-            for file_key in form:
-                file = form[file_key]
+        files = await request.files
+        if files:
+            for file_key in files:
+                file = files[file_key]
                 if file.filename:
                     # 保存上传的文件
                     file_path = os.path.join(handler.temp_dir, f"{uuid.uuid4().hex}_{file.filename}")
                     await file.save(file_path)
-                    handler._add_temp_file(file_path)
+                    await handler._add_temp_file(file_path)
                     file_urls.append(file_path)
                     temp_files.append(file_path)
         
@@ -1133,7 +1187,7 @@ async def chat_completions():
                     async def generate():
                         try:
                             async for chunk in create_openai_stream_response(
-                                handler.chat_with_specific_model(model_upper, text_content, file_urls or None, True, retries), 
+                                await handler.chat_with_specific_model(model_upper, text_content, file_urls or None, True, retries), 
                                 model
                             ):
                                 yield chunk
@@ -1143,7 +1197,7 @@ async def chat_completions():
                             yield "data: [DONE]\n\n"
                         finally:
                             # 清理临时文件
-                            handler.cleanup_temp_files(temp_files)
+                            await handler.cleanup_temp_files(temp_files)
                     
                     return Response(generate(), mimetype='text/plain')
                 else:
@@ -1166,7 +1220,7 @@ async def chat_completions():
                             yield "data: [DONE]\n\n"
                         finally:
                             # 清理临时文件
-                            handler.cleanup_temp_files(temp_files)
+                            await handler.cleanup_temp_files(temp_files)
                     
                     return Response(generate(), mimetype='text/plain')
                 else:
@@ -1207,11 +1261,10 @@ async def chat_completions():
             return jsonify(create_error_response("api_error", str(e), 500)), 500
         finally:
             # 清理临时文件
-            handler.cleanup_temp_files(temp_files)
+            await handler.cleanup_temp_files(temp_files)
     
     except Exception as e:
-        if _IS_MAIN_MODULE:  # 只在主程序运行时输出错误日志
-            logger.error(f"OpenAI API调用出错: {str(e)}")
+        logger.error(f"OpenAI API调用出错: {str(e)}")
         return jsonify(create_error_response("internal_error", str(e), 500)), 500
 
 @app.route('/v1/messages', methods=['POST'])
@@ -1240,19 +1293,19 @@ async def anthropic_messages():
         if not text_content.strip():
             return jsonify(create_error_response("invalid_request", "消息内容为空", 400)), 400
         
-        handler = get_handler()
+        handler = await get_handler()
         
         # 处理文件上传
         file_urls = []
-        form = await request.files
-        if form:
-            for file_key in form:
-                file = form[file_key]
+        files = await request.files
+        if files:
+            for file_key in files:
+                file = files[file_key]
                 if file.filename:
                     # 保存上传的文件
                     file_path = os.path.join(handler.temp_dir, f"{uuid.uuid4().hex}_{file.filename}")
                     await file.save(file_path)
-                    handler._add_temp_file(file_path)
+                    await handler._add_temp_file(file_path)
                     file_urls.append(file_path)
                     temp_files.append(file_path)
         
@@ -1272,7 +1325,7 @@ async def anthropic_messages():
                     async def generate():
                         try:
                             async for chunk in create_anthropic_stream_response(
-                                handler.chat_with_specific_model(model_upper, text_content, file_urls or None, True, retries), 
+                                await handler.chat_with_specific_model(model_upper, text_content, file_urls or None, True, retries), 
                                 model
                             ):
                                 yield chunk
@@ -1281,7 +1334,7 @@ async def anthropic_messages():
                             yield error_chunk
                         finally:
                             # 清理临时文件
-                            handler.cleanup_temp_files(temp_files)
+                            await handler.cleanup_temp_files(temp_files)
                     
                     return Response(generate(), mimetype='text/plain')
                 else:
@@ -1303,7 +1356,7 @@ async def anthropic_messages():
                             yield error_chunk
                         finally:
                             # 清理临时文件
-                            handler.cleanup_temp_files(temp_files)
+                            await handler.cleanup_temp_files(temp_files)
                     
                     return Response(generate(), mimetype='text/plain')
                 else:
@@ -1317,11 +1370,10 @@ async def anthropic_messages():
             return jsonify(create_error_response("api_error", str(e), 500)), 500
         finally:
             # 清理临时文件
-            handler.cleanup_temp_files(temp_files)
+            await handler.cleanup_temp_files(temp_files)
     
     except Exception as e:
-        if _IS_MAIN_MODULE:  # 只在主程序运行时输出错误日志
-            logger.error(f"Anthropic API调用出错: {str(e)}")
+        logger.error(f"Anthropic API调用出错: {str(e)}")
         return jsonify(create_error_response("internal_error", str(e), 500)), 500
 
 @app.route('/v1/models', methods=['GET'])
@@ -1473,7 +1525,7 @@ async def list_models():
 @app.route('/v1/health', methods=['GET'])
 async def health_check():
     """健康检查和统计信息"""
-    handler = get_handler()
+    handler = await get_handler()
     stats = handler.get_stats()
     return jsonify({
         "status": "healthy",
@@ -1497,12 +1549,12 @@ async def index():
         "auto_models": ["auto_chat", "auto_tts", "auto_embedding"],
         "direct_models": ["QWEN", "OPENROUTER", "CEREBRAS", "CHUTES", "MINIMAX", "OLLAMA", "SUANLI"],
         "aliases": {
-##            "claude-3-sonnet-20240229": "auto_chat",
-##            "claude-3-opus-20240229": "auto_chat", 
-##            "claude-3-haiku-20240307": "auto_chat",
-##            "gpt-4": "auto_chat",
-##            "gpt-4.1": "auto_chat"
-##这是一个模型映射表，来适配第三方
+            # "claude-3-sonnet-20240229": "auto_chat",
+            # "claude-3-opus-20240229": "auto_chat", 
+            # "claude-3-haiku-20240307": "auto_chat",
+            # "gpt-4": "auto_chat",
+            # "gpt-4.1": "auto_chat"
+            # 这是一个模型映射表，用于适配第三方ide，暂时不用注释掉
         },
         "model_capabilities": {
             "QWEN": {
@@ -1570,3 +1622,70 @@ async def internal_error(error):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000, debug=False)
+
+
+##async def main():
+##    """测试函数"""
+##    handler = await get_handler()
+##    try:
+##        print("开始测试QWEN模型...")
+##        
+##        # 测试文本对话
+##        print("=== 测试纯文本对话 ===")
+##        try:
+##            result = await handler._try_qwen("你好，请简单介绍一下自己", stream=False)
+##            print(f"非流式回答: {result}")
+##        except Exception as e:
+##            print(f"纯文本测试失败: {e}")
+##        
+##        print("\n=== 测试流式文本对话 ===")
+##        try:
+##            async for chunk in await handler._try_qwen("用一句话描述春天", stream=True):
+##                print(chunk, end="", flush=True)
+##            print("\n")
+##        except Exception as e:
+##            print(f"流式文本测试失败: {e}")
+##        
+##        # 测试多模态对话
+##        print("\n=== 测试图片识别 ===")
+##        try:
+##            image_url = "https://www.10wallpaper.com/wallpaper/1920x1080/1503/Beautiful_green_plain_bay-2015_Bing_theme_wallpaper_1920x1080.jpg"
+##            async for chunk in await handler._try_qwen("详细描述图片内容", [image_url], stream=True):
+##                print(chunk, end="", flush=True)
+##            print("\n")
+##        except Exception as e:
+##            print(f"图片识别测试失败: {e}")
+##        
+##        # 测试回退机制
+##        print("\n=== 测试回退机制 ===")
+##        try:
+##            result = await handler.chat_with_model("测试回退机制，请回答：你是哪个AI模型？")
+##            print(f"回退机制测试结果: {result}")
+##        except Exception as e:
+##            print(f"回退机制测试失败: {e}")
+##        
+##        # 显示统计信息
+##        print("\n=== 统计信息 ===")
+##        stats = handler.get_stats()
+##        for key, value in stats.items():
+##            print(f"{key}: {value}")
+##            
+##    except Exception as e:
+##        print(f"测试过程出现错误: {e}")
+##    finally:
+##        try:
+##            await handler.close()
+##            print("\n=== 资源清理完成 ===")
+##        except Exception as e:
+##            print(f"资源清理失败: {e}")
+##
+##if __name__ == "__main__":
+##    try:
+##        asyncio.run(main())
+##    except KeyboardInterrupt:
+##        print("\n测试被用户中断")
+##    except Exception as e:
+##        print(f"测试运行失败: {e}")
+##
+##if __name__ == "__main__":
+##    asyncio.run(main())

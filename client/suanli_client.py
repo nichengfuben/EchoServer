@@ -3,12 +3,15 @@ import requests
 import json
 import time
 from typing import Optional, Dict, Any, Generator, Tuple
-
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data.suanli_accounts import *
 class SuanliClient:
     """算力 API 客户端，支持流式和非流式聊天"""
-    
+    global API_KEY
     def __init__(self, 
-                 api_key: str = "sk-W0rpStc95T7JVYVwDYc29IyirjtpPPby6SozFMQr17m8KWeo",
+                 api_key: str = API_KEY,
                  base_url: str = "https://api.suanli.cn/v1",
                  default_model: str = "free:Qwen3-30B-A3B",
                  timeout: int = 60):

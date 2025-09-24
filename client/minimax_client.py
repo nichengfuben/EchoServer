@@ -1,4 +1,4 @@
-# integrated_ai_client.py
+# minimax_client.py
 import requests
 import json
 import base64
@@ -10,7 +10,11 @@ import aiofiles
 
 # 配置信息
 BASE_URL = "https://ai.airoe.cn/v1/chat/completions"
-API_KEY = "sk-6u1bhYqbHYo9dBFDWtzhRPorRibaFVj87HFJ72za7AQecNYo"
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data.minimax_accounts import *
+
 MODEL = "minimax"
 TEMPERATURE = 0.7
 
@@ -148,7 +152,6 @@ async def chat_non_stream(question: str, image_path: Optional[str] = None) -> st
         async with session.post(BASE_URL, headers=headers, json=payload) as response:
             # 先读取响应内容
             response_text = await response.text()
-            
             # 检查HTTP状态码并抛出异常
             if response.status == 401:
                 raise AIROEAPIError(401, "API密钥无效或已过期")

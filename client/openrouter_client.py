@@ -12,15 +12,10 @@ from pathlib import Path
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 MODEL_NAME = "x-ai/grok-4-fast:free"
 TIMEOUT = 60
-
-# API 密钥列表
-API_KEYS = [
-    "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",
-    "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",
-    "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",
-    "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",
-    "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"
-]
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data.openrouter_accounts import *
 
 # 失败的密钥集合
 failed_keys = set()
@@ -31,6 +26,7 @@ class OpenRouterClient:
         
     def get_available_key(self) -> Optional[str]:
         """获取可用的API密钥"""
+        global failed_keys
         available_keys = [key for key in API_KEYS if key not in failed_keys]
         if not available_keys:
             # 如果没有可用密钥，重置失败集合并重试
@@ -80,6 +76,7 @@ class OpenRouterClient:
                          image_paths: Optional[List[Union[str, Path]]] = None,
                          temperature: float = 0.2) -> AsyncGenerator[str, None]:
         """流式聊天，支持多模态"""
+        global failed_keys
         api_key = self.get_available_key()
         if not api_key:
             raise RuntimeError("没有可用的API密钥")
@@ -154,6 +151,7 @@ class OpenRouterClient:
                   image_paths: Optional[List[Union[str, Path]]] = None,
                   temperature: float = 0.2) -> str:
         """非流式聊天，支持多模态"""
+        global failed_keys
         api_key = self.get_available_key()
         if not api_key:
             raise RuntimeError("没有可用的API密钥")

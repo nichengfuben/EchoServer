@@ -1,0 +1,58 @@
+# 使用 GitHub Actions 进行自动化部署
+
+name: Deploy to Production
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.9
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run tests
+      run: |
+        pip install pytest pytest-cov pytest-asyncio
+        pytest tests/ --cov=src --cov-report=xml
+    
+    - name: Build Docker image
+      run: |
+        docker build -t ai-multi-model-server:${{ github.ref_name }} .
+        docker tag ai-multi-model-server:${{ github.ref_name }} ai-multi-model-server:latest
+    
+    - name: Deploy to server
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+        REMOTE_USER: ${{ secrets.REMOTE_USER }}
+      run: |
+        echo "$SSH_PRIVATE_KEY" > deploy_key
+        chmod 600 deploy_key
+        ssh -i deploy_key -o StrictHostKeyChecking=no $REMOTE_USER@$REMOTE_HOST << 'ENDSSH'
+          docker pull ai-multi-model-server:latest
+          docker stop ai-multi-model-server || true
+          docker rm ai-multi-model-server || true
+          docker run -d --name ai-multi-model-server -p 8000:8000 ai-multi-model-server:latest
+        ENDSSH
+    
+    - name: Health check
+      run: |
+        sleep 30
+        curl -f http://${{ secrets.REMOTE_HOST }}:8000/health || exit 1
