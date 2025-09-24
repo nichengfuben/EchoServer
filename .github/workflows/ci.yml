@@ -74,8 +74,8 @@ jobs:
     
     - name: Build Docker image
       run: |
-        docker build -t ai-multi-model-server:latest .
+        docker build -t echoserver:latest .
     
     - name: Test Docker image
       run: |
-        docker run --rm ai-multi-model-server:latest python -c "import main; print('Docker build successful')"
+        docker run --rm echoserver:latest python -c "import main; print('Docker build successful')"

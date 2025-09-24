@@ -50,7 +50,7 @@
 ```bash
 # 克隆项目
 git clone https://github.com/nichengfuben/EchoServer.git
-cd ai-multi-model-server
+cd EchoServer
 
 # 创建虚拟环境
 python -m venv venv
@@ -94,7 +94,7 @@ pre-commit run --all-files
 ## 📁 项目结构
 
 ```
-ai-multi-model-server/
+EchoServer/
 ├── src/
 │   ├── client/          # 客户端实现
 │   ├── data/           # 数据配置

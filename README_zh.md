@@ -23,7 +23,7 @@
 ```bash
 # 克隆项目
 git clone https://github.com/nichengfuben/EchoServer.git
-cd ai-multi-model-server
+cd EchoServer
 
 # 创建虚拟环境
 python -m venv venv

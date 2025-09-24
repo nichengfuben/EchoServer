@@ -34,8 +34,8 @@ jobs:
     
     - name: Build Docker image
       run: |
-        docker build -t ai-multi-model-server:${{ github.ref_name }} .
-        docker tag ai-multi-model-server:${{ github.ref_name }} ai-multi-model-server:latest
+        docker build -t echoserver:${{ github.ref_name }} .
+        docker tag echoserver:${{ github.ref_name }} echoserver:latest
     
     - name: Deploy to server
       env:
@@ -46,10 +46,10 @@ jobs:
         echo "$SSH_PRIVATE_KEY" > deploy_key
         chmod 600 deploy_key
         ssh -i deploy_key -o StrictHostKeyChecking=no $REMOTE_USER@$REMOTE_HOST << 'ENDSSH'
-          docker pull ai-multi-model-server:latest
-          docker stop ai-multi-model-server || true
-          docker rm ai-multi-model-server || true
-          docker run -d --name ai-multi-model-server -p 8000:8000 ai-multi-model-server:latest
+          docker pull echoserver:latest
+          docker stop echoserver || true
+          docker rm echoserver || true
+          docker run -d --name echoserver -p 8000:8000 echoserver:latest
         ENDSSH
     
     - name: Health check

@@ -19,7 +19,7 @@ A high-performance asynchronous AI multi-model integration server supporting var
 ```bash
 # Clone the repository
 git clone https://github.com/nichengfuben/EchoServer.git
-cd ai-multi-model-server
+cd EchoServer
 
 # Create virtual environment
 python -m venv venv
