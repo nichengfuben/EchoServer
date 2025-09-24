@@ -22,7 +22,7 @@
 
 ```bash
 # 克隆项目
-git clone https://github.com/your-username/ai-multi-model-server.git
+git clone https://github.com/nichengfuben/EchoServer.git
 cd ai-multi-model-server
 
 # 创建虚拟环境

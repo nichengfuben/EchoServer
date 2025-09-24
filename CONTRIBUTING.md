@@ -5,12 +5,12 @@
 ## 🎯 贡献方式
 
 ### 🐛 报告问题
-- 使用 [GitHub Issues](https://github.com/your-username/ai-multi-model-server/issues) 报告 bug
+- 使用 [GitHub Issues](https://github.com/nichengfuben/EchoServer/issues) 报告 bug
 - 提供详细的复现步骤和环境信息
 - 添加相关日志和错误信息
 
 ### 💡 功能建议
-- 在 [GitHub Discussions](https://github.com/your-username/ai-multi-model-server/discussions) 中讨论新功能
+- 在 [GitHub Discussions](https://github.com/nichengfuben/EchoServer/discussions) 中讨论新功能
 - 说明功能的用途和预期行为
 - 考虑向后兼容性
 
@@ -49,7 +49,7 @@
 ### 1. 环境准备
 ```bash
 # 克隆项目
-git clone https://github.com/your-username/ai-multi-model-server.git
+git clone https://github.com/nichengfuben/EchoServer.git
 cd ai-multi-model-server
 
 # 创建虚拟环境

@@ -18,7 +18,7 @@ A high-performance asynchronous AI multi-model integration server supporting var
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/ai-multi-model-server.git
+git clone https://github.com/nichengfuben/EchoServer.git
 cd ai-multi-model-server
 
 # Create virtual environment
